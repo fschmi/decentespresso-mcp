@@ -13,8 +13,6 @@ from decentespresso_mcp.config import Config
 from decentespresso_mcp.db import Database
 from decentespresso_mcp.server import SERVER_NAME, build_app, build_mcp
 
-from .conftest import TEST_SECRET
-
 FIXTURES = pathlib.Path(__file__).parent / "fixtures"
 
 
@@ -31,17 +29,17 @@ def app_for(config: Config, db: Database):
     return build_app(config, db=db, enable_sync=False)
 
 
-def test_healthz_is_reachable_without_secret(config: Config, db: Database) -> None:
+def test_healthz_is_reachable_without_auth(config: Config, db: Database) -> None:
     with TestClient(app_for(config, db)) as client:
         response = client.get("/healthz")
     assert response.status_code == 200
     assert response.text == "ok"
 
 
-def test_mcp_endpoint_exists_under_secret_path(config: Config, db: Database) -> None:
+def test_mcp_endpoint_exists_under_mcp_path(config: Config, db: Database) -> None:
     with TestClient(app_for(config, db)) as client:
         response = client.post(
-            f"/{TEST_SECRET}/mcp",
+            "/mcp",
             headers={"Accept": "application/json, text/event-stream"},
             json={"jsonrpc": "2.0", "id": 1, "method": "ping"},
         )
@@ -50,7 +48,7 @@ def test_mcp_endpoint_exists_under_secret_path(config: Config, db: Database) -> 
 
 def test_unknown_paths_return_bare_404(config: Config, db: Database) -> None:
     with TestClient(app_for(config, db)) as client:
-        for path in ["/", "/mcp", "/wrong-secret/mcp", f"/{TEST_SECRET}", "/.env"]:
+        for path in ["/", "/other", "/.env"]:
             response = client.get(path)
             assert response.status_code == 404, path
             assert response.content == b"", path
@@ -110,12 +108,9 @@ async def test_status_warns_about_stale_sync(config: Config, db: Database) -> No
                for w in payload["warnings"])
 
 
-async def test_no_secret_leaks_into_mcp_metadata(config: Config, db: Database) -> None:
+async def test_decaid_url_not_redacted_from_mcp_metadata(config: Config, db: Database) -> None:
     async with Client(build_mcp(config, db)) as client:
-        tools = await client.list_tools()
         result = await client.call_tool("status", {})
-    blob = json.dumps([t.model_dump(mode="json") for t in tools]) + json.dumps(result.data)
-    assert TEST_SECRET not in blob
     assert config.decaid_url in json.dumps(result.data), (
         "the LAN address is no secret and helps when looking things up")
 

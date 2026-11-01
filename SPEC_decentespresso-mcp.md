@@ -4,6 +4,12 @@
 how it came to be. Where a decision still explains behaviour, the reasoning is
 kept; where it only explains history, it is gone.
 
+> **Fork deviation.** This document is upstream's and is otherwise left as-is
+> for reference. One exception: §12's "secret path instead of auth"
+> (`MCP_PATH_SECRET`, `/<secret>/mcp`) was removed in this fork. The endpoint
+> is fixed at `/mcp` and relies on an external OAuth gate (Caddy `jwtauth` +
+> Dex) instead — see this fork's `README.md`.
+
 ---
 
 ## 1. What this is

@@ -1,7 +1,8 @@
 """No secret in the logs.
 
-Two secrets exist on this server: the path secret that stands in for
-authentication, and the ntfy token that travels as ``Authorization: Bearer``.
+The one secret this fork's server holds is the ntfy token, which travels as
+``Authorization: Bearer``. ``FAKE_SECRET`` below is arbitrary test data for
+the formatter itself, independent of what Config actually redacts.
 """
 
 from __future__ import annotations
@@ -11,7 +12,9 @@ import logging
 from decentespresso_mcp.config import Config
 from decentespresso_mcp.logging_setup import REDACTED, KeyValueFormatter, setup_logging
 
-from .conftest import TEST_NTFY_TOKEN, TEST_SECRET
+from .conftest import TEST_NTFY_TOKEN
+
+FAKE_SECRET = "0123456789abcdef0123456789abcdef0123456789abcdef"
 
 
 def _record(msg: str, *args: object, **kwargs: object) -> logging.LogRecord:
@@ -36,14 +39,14 @@ def test_extra_fields_are_appended() -> None:
 
 
 def test_secret_in_message_is_redacted() -> None:
-    fmt = KeyValueFormatter([TEST_NTFY_TOKEN, TEST_SECRET])
-    out = fmt.format(_record("connecting to https://host/%s/mcp", TEST_SECRET))
-    assert TEST_SECRET not in out
+    fmt = KeyValueFormatter([TEST_NTFY_TOKEN, FAKE_SECRET])
+    out = fmt.format(_record("connecting to https://host/%s/mcp", FAKE_SECRET))
+    assert FAKE_SECRET not in out
     assert REDACTED in out
 
 
 def test_secret_in_traceback_is_redacted() -> None:
-    fmt = KeyValueFormatter([TEST_NTFY_TOKEN, TEST_SECRET])
+    fmt = KeyValueFormatter([TEST_NTFY_TOKEN, FAKE_SECRET])
     try:
         raise RuntimeError(f"ntfy refused {TEST_NTFY_TOKEN}")
     except RuntimeError:
@@ -58,9 +61,9 @@ def test_secret_in_traceback_is_redacted() -> None:
 
 def test_secret_in_extra_field_is_redacted() -> None:
     record = _record("request")
-    record.fields = {"url": f"https://host/{TEST_SECRET}/mcp"}  # type: ignore[attr-defined]
-    out = KeyValueFormatter([TEST_SECRET]).format(record)
-    assert TEST_SECRET not in out
+    record.fields = {"url": f"https://host/{FAKE_SECRET}/mcp"}  # type: ignore[attr-defined]
+    out = KeyValueFormatter([FAKE_SECRET]).format(record)
+    assert FAKE_SECRET not in out
 
 
 def test_short_values_are_not_redacted() -> None:
@@ -78,9 +81,8 @@ def test_setup_logging_redacts_on_stdout(capsys, notifying_config: Config) -> No
         notifying_config.connector_url, TEST_NTFY_TOKEN,
     )
     out = capsys.readouterr().out
-    assert TEST_SECRET not in out
     assert TEST_NTFY_TOKEN not in out
-    assert out.count(REDACTED) == 2
+    assert out.count(REDACTED) == 1
 
     logging.getLogger().handlers.clear()
 
@@ -140,5 +142,5 @@ def test_the_ntfy_token_is_on_the_list(notifying_config: Config) -> None:
     assert TEST_NTFY_TOKEN in notifying_config.secret_values()
 
 
-def test_without_ntfy_only_the_path_secret_remains(config: Config) -> None:
-    assert config.secret_values() == (TEST_SECRET,)
+def test_without_ntfy_no_secrets_remain(config: Config) -> None:
+    assert config.secret_values() == ()

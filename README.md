@@ -1,5 +1,13 @@
 # decentespresso-mcp
 
+> **Fork note.** This is [fschmi](https://github.com/fschmi)'s fork of
+> [The-Walker443/decentespresso-mcp](https://github.com/The-Walker443/decentespresso-mcp).
+> It drops the upstream `MCP_PATH_SECRET` path-secret auth model and mounts
+> the MCP endpoint at a fixed `/mcp` instead, because this fork is meant to
+> run behind an external OAuth gate (Caddy `jwtauth` + Dex) rather than trust
+> a bare secret path as the only thing standing between the internet and the
+> container.
+
 **Your espresso archive, and someone to talk to about it.**
 
 Every shot your Decent DE1 pulls is already measured in fine detail — pressure,
@@ -170,8 +178,8 @@ the other way round.
                               ▼
                   decentespresso-mcp (Docker)          ← the memory
                               │  internal Docker network
-                        cloudflared
-                              │  https://<host>/<secret>/mcp
+                      OAuth gate + tunnel
+                              │  https://<host>/mcp
                               ▼
                            Claude                      ← the interface
 ```
@@ -203,16 +211,15 @@ state, not an error, and nothing will nag you about it.
 ## Quickstart
 
 ```bash
-git clone https://github.com/The-Walker443/decentespresso-mcp
+git clone https://github.com/fschmi/decentespresso-mcp
 cd decentespresso-mcp
 cp .env.example .env
 ```
 
-Two things have to be filled in:
+One thing has to be filled in:
 
 ```dotenv
 DECAID_URL=http://10.100.100.171:8080   # your tablet, private IP only
-MCP_PATH_SECRET=<openssl rand -hex 24>  # stands in for authentication
 ```
 
 Then:
@@ -233,14 +240,16 @@ ingress:
   - service: http_status:404
 ```
 
-Fetch the connector URL — it carries the secret, so it is never logged:
+Fetch the connector URL:
 
 ```bash
 docker compose exec decentespresso-mcp decentespresso-mcp --print-connector-url
 ```
 
-Paste it into claude.ai under **Settings → Connectors → Add custom connector**,
-leaving the OAuth fields empty. Then ask it something.
+Put an OAuth gate (Caddy `jwtauth` + Dex, or equivalent) in front of this
+container — the endpoint has no auth of its own in this fork. Paste the
+connector URL into claude.ai under **Settings → Connectors → Add custom
+connector**. Then ask it something.
 
 Prefer Portainer and a prebuilt image from `ghcr.io`? `compose.portainer.yaml`
 and [the specification](SPEC_decentespresso-mcp.md#13-deployment) cover that
@@ -252,11 +261,12 @@ route, including the stack variables.
 
 The connection to your tablet is local network only — `DECAID_URL` accepts
 private IP literals and nothing else, and that traffic never touches the tunnel.
-The MCP endpoint hides behind a secret path instead of a login, every other path
-returns an empty 404, and access logs are off so the path never lands in a log
-file. The container runs non-root on a read-only filesystem, publishes no host
-port, and the log formatter redacts the only two secrets it holds — including
-inside tracebacks from libraries that know nothing about it.
+This fork has no auth of its own — put an OAuth gate (Caddy `jwtauth` + Dex, or
+equivalent) in front of it, and everything other than `/mcp` and `/healthz`
+still returns an empty 404. The container runs non-root on a read-only
+filesystem, publishes no host port, and the log formatter redacts the one
+secret it holds (the ntfy token) — including inside tracebacks from libraries
+that know nothing about it.
 
 ---
 
@@ -292,7 +302,6 @@ and lists every problem at once, rather than one per restart.
 | Variable | Default | |
 |---|---|---|
 | `DECAID_URL` | — | your tablet, private IP literal only |
-| `MCP_PATH_SECRET` | — | ≥32 characters, stands in for authentication |
 | `SYNC_INTERVAL_MIN` | `15` | `0` switches the background sync off |
 | `WRITE_ENABLED` | `false` | unlocks the four write tools |
 | `GUARD_RULES` | all | comma-separated rule names, or `none` |

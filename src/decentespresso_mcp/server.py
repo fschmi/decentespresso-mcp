@@ -1,4 +1,8 @@
-"""FastMCP app: streamable HTTP endpoint under the secret path (SPEC §9, §10).
+"""FastMCP app: streamable HTTP endpoint at /mcp (SPEC §9, §10).
+
+Fork note: this fork drops the upstream secret-path auth model and mounts at
+a fixed /mcp instead, because this deployment sits behind an external OAuth
+gate (Caddy jwtauth + Dex) that authenticates every request first.
 
 The tool docstrings are not decoration: Claude reads them and has to work out
 from them, without asking back, what a number means. Units, the semantics of
@@ -837,9 +841,8 @@ def build_mcp(
 
     @mcp.custom_route("/healthz", methods=["GET"], include_in_schema=False)
     async def healthz(request: Request) -> Response:
-        # Deliberately without the secret path: the Docker health check does not
-        # know it. Reveals nothing, but per SPEC §12 must not reach the tunnel
-        # ingress.
+        # Separate from /mcp so the Docker healthcheck doesn't need an OAuth
+        # token. Reveals nothing, but must not reach the tunnel ingress.
         return PlainTextResponse("ok")
 
     return mcp
@@ -1968,7 +1971,7 @@ def build_app(
     db: Database | None = None,
     enable_sync: bool | None = None,
 ):
-    """The finished ASGI app: MCP under ``/<secret>/mcp``, ``/healthz``, else 404.
+    """The finished ASGI app: MCP under ``/mcp``, ``/healthz``, else 404.
 
     ``enable_sync`` controls the background loop *and* the Decaid connection;
     without it both run when ``SYNC_INTERVAL_MIN > 0``. Tests set it to False

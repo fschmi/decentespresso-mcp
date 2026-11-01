@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import ipaddress
 import os
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import PurePosixPath, PureWindowsPath
@@ -23,15 +22,7 @@ from .guards import (
     RATING_GRACE_HOURS,
 )
 
-#: MCP_PATH_SECRET stands in for authentication (SPEC §12) and must
-#: therefore not be guessable. ``openssl rand -hex 24`` yields 48 characters.
-MIN_SECRET_LEN = 32
-_SECRET_CHARSET = re.compile(r"^[A-Za-z0-9_-]+$")
-
 _LOG_LEVELS = {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"}
-
-#: Placeholders from .env.example - anyone leaving them has not read the file.
-_PLACEHOLDERS = {"change-me", "you@example.com", "<openssl rand -hex 24>"}
 
 
 
@@ -46,7 +37,6 @@ class ConfigError(ValueError):
 
 @dataclass(frozen=True, repr=False)
 class Config:
-    mcp_path_secret: str
     sync_interval_min: int
     db_path: str
     log_level: str
@@ -75,12 +65,18 @@ class Config:
 
     @property
     def mcp_path(self) -> str:
-        """Path the MCP endpoint hangs under - contains the secret."""
-        return f"/{self.mcp_path_secret}/mcp"
+        """Path the MCP endpoint hangs under.
+
+        Fixed, not secret-bearing: this fork is deployed behind an external
+        OAuth gate (Caddy jwtauth + Dex) that authenticates every request
+        before it reaches this app, so a secret path segment here would be
+        redundant defense-in-depth rather than the actual boundary.
+        """
+        return "/mcp"
 
     @property
     def connector_url(self) -> str | None:
-        """Full URL for the Claude connector. Contains the secret - do not log."""
+        """Full URL for the Claude connector."""
         if not self.public_base_url:
             return None
         return f"{self.public_base_url.rstrip('/')}{self.mcp_path}"
@@ -97,33 +93,19 @@ class Config:
         Kept apart from ``ConfigError``: these do not prevent a start but should
         still be noticed.
         """
-        warnings: list[str] = []
-        if len(self.mcp_path_secret) < MIN_SECRET_LEN + 8:
-            # Long enough to pass validation, short enough to be worth a word:
-            # this path secret stands in for authentication entirely.
-            warnings.append(
-                f"MCP_PATH_SECRET is {len(self.mcp_path_secret)} characters. It "
-                "replaces authentication outright - openssl rand -hex 24 gives 48."
-            )
-        return warnings
+        return []
 
     def secret_values(self) -> tuple[str, ...]:
         """Values the log filter (``logging_setup``) must never let through.
 
         Decaid needs no credentials - the tablet is on the same network - so
-        what is left is the path secret, which stands in for authentication,
-        and the ntfy token, which travels as ``Authorization: Bearer``.
-
-        The ntfy token was missing here until the Visualizer credentials were
-        removed; with three other entries in the tuple, nobody noticed that it
-        was not one of them.
+        what is left is the ntfy token, which travels as ``Authorization: Bearer``.
         """
-        return tuple(v for v in (self.mcp_path_secret, self.ntfy_token) if v)
+        return tuple(v for v in (self.ntfy_token,) if v)
 
     def __repr__(self) -> str:
         return (
             "Config("
-            f"mcp_path_secret='***({len(self.mcp_path_secret)} chars)', "
             f"sync_interval_min={self.sync_interval_min}, "
             f"db_path={self.db_path!r}, "
             f"log_level={self.log_level!r}, "
@@ -139,20 +121,6 @@ class Config:
     def from_env(cls, env: Mapping[str, str] | None = None) -> Config:
         src = os.environ if env is None else env
         problems: list[str] = []
-
-        secret = _req_str(src, "MCP_PATH_SECRET", problems)
-
-        if secret is not None:
-            if len(secret) < MIN_SECRET_LEN:
-                problems.append(
-                    f"MCP_PATH_SECRET is {len(secret)} characters long, "
-                    f"mindestens {MIN_SECRET_LEN} noetig (openssl rand -hex 24)"
-                )
-            if not _SECRET_CHARSET.match(secret):
-                problems.append(
-                    "MCP_PATH_SECRET may only contain [A-Za-z0-9_-] "
-                    "(it becomes part of the URL)"
-                )
 
         # 0 switches the background loop off (a manual sync stays possible).
         interval = _int_in_range(src, "SYNC_INTERVAL_MIN", 15, 0, 1440, problems)
@@ -204,7 +172,6 @@ class Config:
             raise ConfigError(problems)
 
         return cls(
-            mcp_path_secret=secret,  # type: ignore[arg-type]
             sync_interval_min=interval,
             db_path=db_path,
             log_level=log_level,
@@ -320,17 +287,6 @@ def _is_absolute_path(path: str) -> bool:
     differently depending on the host.
     """
     return PurePosixPath(path).is_absolute() or PureWindowsPath(path).is_absolute()
-
-
-def _req_str(src: Mapping[str, str], key: str, problems: list[str]) -> str | None:
-    value = (src.get(key) or "").strip()
-    if not value:
-        problems.append(f"{key} is missing or empty")
-        return None
-    if value in _PLACEHOLDERS:
-        problems.append(f"{key} still holds the placeholder from .env.example")
-        return None
-    return value
 
 
 def _int_in_range(

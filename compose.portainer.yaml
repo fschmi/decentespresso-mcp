@@ -6,10 +6,12 @@
 #     ownership from the image, so the manual chown 10001 on the host is gone
 #   - no .env file: Portainer fills the ${VAR} from the stack variables
 #
+# Fork note: MCP_PATH_SECRET was dropped - this fork expects an external
+# OAuth gate (e.g. Caddy jwtauth + Dex) in front of it instead.
+#
 # Variables to set (Portainer -> Stack -> Environment variables):
 #   IMAGE_REPOSITORY   e.g. ghcr.io/<owner>/decentespresso-mcp
 #   IMAGE_TAG          latest  (or a sha-... for a pinned version)
-#   MCP_PATH_SECRET    openssl rand -hex 24
 #   PUBLIC_BASE_URL    https://<hostname>
 #   WRITE_ENABLED      false (default) or true for the write tools
 #   DECAID_URL         http://10.100.100.171:8080 (private IPs only)
@@ -24,7 +26,6 @@ services:
     restart: unless-stopped
 
     environment:
-      MCP_PATH_SECRET: ${MCP_PATH_SECRET}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
       SYNC_INTERVAL_MIN: ${SYNC_INTERVAL_MIN:-15}
       WRITE_ENABLED: ${WRITE_ENABLED:-false}

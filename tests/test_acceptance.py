@@ -15,7 +15,7 @@ import pathlib
 from collections.abc import Iterator
 
 import pytest
-from conftest import TEST_NTFY_TOKEN, TEST_SECRET
+from conftest import TEST_NTFY_TOKEN
 from fastmcp import Client
 from helpers import REFERENCE_ID, corpus, decaid_detail, store_shot_with_profile
 from test_sync import FakeDecaid
@@ -137,8 +137,7 @@ async def test_criterion_6_no_secret_in_tool_output(config: Config, db: Database
                                         default=str))
 
     blob = "\n".join(collected)
-    for secret in (TEST_SECRET, TEST_NTFY_TOKEN):
-        assert secret not in blob, "criterion 6: a secret in a tool response"
+    assert TEST_NTFY_TOKEN not in blob, "criterion 6: a secret in a tool response"
 
 
 def test_criterion_6_no_secret_in_logs(capsys, notifying_config: Config) -> None:
@@ -159,8 +158,7 @@ def test_criterion_6_no_secret_in_logs(capsys, notifying_config: Config) -> None
     out = capsys.readouterr().out
     logging.getLogger().handlers.clear()
 
-    for secret in (TEST_SECRET, TEST_NTFY_TOKEN):
-        assert secret not in out, "criterion 6: a secret in the log"
+    assert TEST_NTFY_TOKEN not in out, "criterion 6: a secret in the log"
     assert REDACTED in out
 
 @pytest.mark.parametrize(

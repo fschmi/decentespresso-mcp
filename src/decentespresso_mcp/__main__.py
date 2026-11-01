@@ -23,11 +23,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--print-connector-url",
         action="store_true",
-        help=(
-            "Prints the full connector URL including the secret to stdout and "
-            "exits. Call this manually only - otherwise the URL ends up "
-            "permanently in 'docker logs'."
-        ),
+        help="Prints the full connector URL to stdout and exits.",
     )
     parser.add_argument(
         "--backfill",
@@ -76,7 +72,7 @@ def main(argv: list[str] | None = None) -> int:
                 "version": __version__,
                 "host": config.host,
                 "port": config.port,
-                "mcp_path": "/<secret>/mcp",
+                "mcp_path": config.mcp_path,
                 "sync_interval_min": config.sync_interval_min,
                 "db_path": config.db_path,
                 "tz": config.display_tz,
@@ -96,7 +92,7 @@ def main(argv: list[str] | None = None) -> int:
         host=config.host,
         port=config.port,
         log_config=None,  # logging comes from setup_logging (redaction included)
-        access_log=False,  # access logs would record the secret path
+        access_log=False,  # Caddy/Dex already logs access; avoid duplicating it here
     )
     return 0
 

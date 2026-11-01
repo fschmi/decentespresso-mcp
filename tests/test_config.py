@@ -5,8 +5,6 @@ import pytest
 from decentespresso_mcp.config import Config, ConfigError
 from decentespresso_mcp.guards import ALL_RULES
 
-from .conftest import TEST_SECRET
-
 
 def test_defaults_are_applied(config: Config) -> None:
     assert config.sync_interval_min == 15
@@ -17,8 +15,10 @@ def test_defaults_are_applied(config: Config) -> None:
 
 
 def test_mcp_path_and_connector_url(config: Config) -> None:
-    assert config.mcp_path == f"/{TEST_SECRET}/mcp"
-    assert config.connector_url == f"https://coffee-mcp.example.com/{TEST_SECRET}/mcp"
+    # Fixed, not secret-bearing - this fork sits behind an external OAuth
+    # gate (Caddy jwtauth + Dex) instead.
+    assert config.mcp_path == "/mcp"
+    assert config.connector_url == "https://coffee-mcp.example.com/mcp"
 
 
 def test_connector_url_is_none_without_base_url(valid_env: dict[str, str]) -> None:
@@ -26,40 +26,13 @@ def test_connector_url_is_none_without_base_url(valid_env: dict[str, str]) -> No
     assert Config.from_env(valid_env).connector_url is None
 
 @pytest.mark.parametrize(
-    "key", ["MCP_PATH_SECRET", "DECAID_URL"]
+    "key", ["DECAID_URL"]
 )
 def test_missing_required_value_fails(valid_env: dict[str, str], key: str) -> None:
     del valid_env[key]
     with pytest.raises(ConfigError) as excinfo:
         Config.from_env(valid_env)
     assert any(key in p for p in excinfo.value.problems)
-
-
-def test_empty_string_counts_as_missing(valid_env: dict[str, str]) -> None:
-    valid_env["MCP_PATH_SECRET"] = "   "
-    with pytest.raises(ConfigError):
-        Config.from_env(valid_env)
-
-
-def test_placeholder_from_env_example_is_rejected(valid_env: dict[str, str]) -> None:
-    valid_env["MCP_PATH_SECRET"] = "<openssl rand -hex 24>"
-    with pytest.raises(ConfigError) as excinfo:
-        Config.from_env(valid_env)
-    assert sum("placeholder" in p for p in excinfo.value.problems) == 1
-
-
-def test_short_secret_is_rejected(valid_env: dict[str, str]) -> None:
-    valid_env["MCP_PATH_SECRET"] = "a" * 31
-    with pytest.raises(ConfigError) as excinfo:
-        Config.from_env(valid_env)
-    assert any("31 characters" in p for p in excinfo.value.problems)
-
-
-def test_secret_must_be_url_safe(valid_env: dict[str, str]) -> None:
-    valid_env["MCP_PATH_SECRET"] = "a/b?" + "x" * 30
-    with pytest.raises(ConfigError) as excinfo:
-        Config.from_env(valid_env)
-    assert any("A-Za-z0-9_-" in p for p in excinfo.value.problems)
 
 
 @pytest.mark.parametrize("raw", ["-1", "1441", "nope", "15.5"])
@@ -108,23 +81,15 @@ def test_base_url_needs_scheme(valid_env: dict[str, str]) -> None:
 
 def test_all_problems_are_reported_at_once(valid_env: dict[str, str]) -> None:
     # One start should show every problem, not one per restart.
-    valid_env["MCP_PATH_SECRET"] = "short"
     valid_env["LOG_LEVEL"] = "CHATTY"
+    valid_env["SYNC_INTERVAL_MIN"] = "nope"
     valid_env["DECAID_URL"] = "https://decaid.example.com"
     with pytest.raises(ConfigError) as excinfo:
         Config.from_env(valid_env)
     assert len(excinfo.value.problems) >= 3
 
-def test_a_proper_secret_warns_about_nothing(config: Config) -> None:
+def test_no_warnings_by_default(config: Config) -> None:
     assert config.startup_warnings() == []
-
-
-def test_a_barely_long_enough_secret_is_worth_a_word(valid_env) -> None:
-    """It passes validation, and it still stands in for authentication."""
-    valid_env["MCP_PATH_SECRET"] = "a" * 33
-    warnings = Config.from_env(valid_env).startup_warnings()
-    assert len(warnings) == 1
-    assert "MCP_PATH_SECRET" in warnings[0]
 
 # --------------------------------------------------- DECAID_URL (SPEC ss20.6)
 
